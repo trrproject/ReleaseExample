@@ -42,10 +42,7 @@ jobs:
         run: dotnet restore calculator-nuget-demo/calculator-nuget-demo.csproj
 
       - name: Build package
-        run: dotnet build calculator-nuget-demo/calculator-nuget-demo.csproj -c Release --no-restore
-
-      - name: Pack package
-        run: dotnet pack calculator-nuget-demo/calculator-nuget-demo.csproj -p:Version='${{ steps.gitversion.outputs.SemVer }}' -c Release
+        run: dotnet build calculator-nuget-demo/calculator-nuget-demo.csproj -p:Version='${{ steps.gitversion.outputs.SemVer }}' -c Release --no-restore
 
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v3.1.3
