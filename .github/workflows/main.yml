@@ -1,70 +1,32 @@
 name: CI/CD
 
 on:
-  push:
-    branches:
-      - master
-  workflow_dispatch: 
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment to deploy the packages
+        required: true
+        type: string
+    outputs:
+      new_tag:
+        value: ${{ jobs.tag.outputs.new_tag}}
+      new_version:
+        value: ${{ jobs.tag.outputs.new_version }}
       
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs: 
-      Version: ${{ steps.gitversion.outputs.SemVer }}
-      CommitsSinceVersionSource: ${{ steps.gitversion.outputs.CommitsSinceVersionSource }} 
-
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Check-out repository
         uses: actions/checkout@v4.1.1
         with:
           fetch-depth: 0
-
-      - name: Install GitVersion
-        uses: gittools/actions/gitversion/setup@v0.10.2
-        with:
-          versionSpec: 5.x
-      - name: Determine Version
-        uses: gittools/actions/gitversion/execute@v0.10.2
-        id: gitversion # step id used as reference for output values
-      - name: Display GitVersion outputs
-        run: |
-          echo "Version: ${{ steps.gitversion.outputs.SemVer }}"
-          echo "CommitsSinceVersionSource: ${{ steps.gitversion.outputs.CommitsSinceVersionSource }}"
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: 6.0.x
-
-      - name: Restore packages
-        run: dotnet restore calculator-nuget-demo/calculator-nuget-demo.csproj
-
-      - name: Build package
-        run: dotnet build calculator-nuget-demo/calculator-nuget-demo.csproj -p:Version='${{ steps.gitversion.outputs.SemVer }}' -c Release --no-restore
-
-      - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v3.1.3
-        with:
-          name: nugetPackage
-          path: calculator-nuget-demo/bin/Release/*.nupkg
-
-  release:
-    runs-on: ubuntu-latest
-    needs: build 
-    if: github.ref == 'refs/heads/master' # only run job if on the master branch
-    steps:
-      #Push NuGet package to GitHub packages
-      - name: Download nuget package artifact
-        uses: actions/download-artifact@v1.0.0
-        with:
-          name: nugetPackage         
-
-      - name: Prep packages
-        run: dotnet nuget add source --username trrproject --password ${{ secrets.NUGET_PACKAGE_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/trrproject/index.json"
-      - name: Push package to GitHub packages 
-        if: needs.build.outputs.CommitsSinceVersionSource > 0 #Only release if there has been a commit/version change
-        run: dotnet nuget push nugetPackage/*.nupkg --api-key ${{ secrets.NUGET_PACKAGE_TOKEN }}  --source "github"
-  
+ 
   tag:
     name: Update and push tag
     runs-on: ubuntu-latest
@@ -109,21 +71,3 @@ jobs:
           tag_suffix: ${{ github.ref_name == 'live' && 'live' || '' }}
           fetch_all_tags: true
           is_dry_run: ${{ env.is_dry_run }}
-          
-    #Create release
-      - name: Create Release
-        if: 1 == 0 #needs.build.outputs.CommitsSinceVersionSource > 0 #Only release if there has been a commit/version change
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.NUGET_PACKAGE_TOKEN }} 
-        with:
-          tag_name: ${{ needs.build.outputs.Version }}
-          release_name: Release ${{ needs.build.outputs.Version }}
-      - name: Create Release
-        if: needs.build.outputs.CommitsSinceVersionSource > 0 #Only release if there has been a commit/version change
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ needs.build.outputs.Version }}
-          name: Release ${{ needs.build.outputs.Version }}
-          artifacts: "nugetPackage/*"
-          token: ${{ secrets.NUGET_PACKAGE_TOKEN }}
