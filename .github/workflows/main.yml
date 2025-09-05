@@ -64,7 +64,52 @@ jobs:
       - name: Push package to GitHub packages 
         if: needs.build.outputs.CommitsSinceVersionSource > 0 #Only release if there has been a commit/version change
         run: dotnet nuget push nugetPackage/*.nupkg --api-key ${{ secrets.NUGET_PACKAGE_TOKEN }}  --source "github"
-    
+  
+  tag:
+    name: Update and push tag
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.tag.outputs.tag }}
+      new_version: ${{ steps.tag.outputs.version }}
+    needs: [build]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get default bump
+        run: |
+          branch_name=${GITHUB_REF#refs/heads/}
+          if [[ "$branch_name" == Test* || "$branch_name" == staging || "$branch_name" == "release/*" ]]; then
+              default_bump='prerelease'
+          elif [[ "$branch_name" == "live" ]]; then
+              default_bump='minor'
+          else
+              default_bump='patch'
+          fi
+          echo "default_bump=$default_bump" >> $GITHUB_ENV
+
+      - name: Check is dry run
+        run: |
+          branch_name=${GITHUB_REF#refs/heads/}
+          if [[ "$branch_name" == feature* || "$branch_name" == master ]]; then
+              is_dry_run=true
+          else
+              is_dry_run=false
+          fi
+          echo "is_dry_run=$is_dry_run" >> $GITHUB_ENV
+
+      - name: Update and push tag
+        uses: trrproject/GHA-CreateTag-Python@master
+        id: tag
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: ${{ env.default_bump }}
+          tag_suffix: ${{ github.ref_name == 'live' && 'live' || '' }}
+          fetch_all_tags: true
+          is_dry_run: ${{ env.is_dry_run }}
+          
     #Create release
       - name: Create Release
         if: 1 == 0 #needs.build.outputs.CommitsSinceVersionSource > 0 #Only release if there has been a commit/version change
